@@ -69,6 +69,33 @@ npm run build
 
 The built app will be in the `dist` directory. Deploy it to any static hosting service!
 
+## 🐳 Docker
+
+### Using Pre-built Image
+
+```bash
+docker pull ghcr.io/geek-at/removebg:latest
+docker run -p 8080:80 ghcr.io/geek-at/removebg:latest
+```
+
+Then open http://localhost:8080
+
+### Building Locally
+
+```bash
+docker build -t removebg .
+docker run -p 8080:80 removebg
+```
+
+### GitHub Actions
+
+The project includes a GitHub Actions workflow that automatically builds and pushes a Docker image to GitHub Container Registry (ghcr.io) on every push to main/master.
+
+To use it:
+1. Push your code to GitHub
+2. The workflow will automatically build and push the image
+3. Pull and run the image from `ghcr.io/YOUR_USERNAME/removebg:latest`
+
 ## 🌐 Browser Support
 
 Works in all modern browsers that support:
