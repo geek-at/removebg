@@ -1,0 +1,84 @@
+:root {
+  --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --bg-color: #f0f0f0;
+  --text-color: #1a1a1a;
+  --primary-color: #000000;
+  --accent-color: #ff3e00;
+  --border-width: 3px;
+  --shadow-offset: 4px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  border: var(--border-width) solid var(--primary-color);
+  background-color: #fff;
+  color: var(--primary-color);
+  padding: 0.8em 1.5em;
+  cursor: pointer;
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--primary-color);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+button:active {
+  transform: translate(2px, 2px);
+  box-shadow: calc(var(--shadow-offset) - 2px) calc(var(--shadow-offset) - 2px) 0px var(--primary-color);
+}
+
+button:hover {
+  background-color: #ffe0d0;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.card {
+  border: var(--border-width) solid var(--primary-color);
+  background: #fff;
+  padding: 2rem;
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--primary-color);
+  margin-bottom: 2rem;
+}
+
+h1, h2, h3 {
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.05em;
+  margin-top: 0;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.file-label {
+  display: inline-block;
+  border: var(--border-width) dashed var(--primary-color);
+  padding: 2rem;
+  width: 100%;
+  text-align: center;
+  cursor: pointer;
+  font-weight: bold;
+  background: #fff;
+}
+
+.file-label:hover {
+  background: #f9f9f9;
+}
