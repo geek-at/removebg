@@ -17,12 +17,6 @@ function App() {
     const handleModelSelect = async (model: ModelType) => {
         if (loading) return;
         setSelectedModel(model);
-
-        // If we have an image, re-process it
-        if (imageFile) {
-            // We need to wait for state update or just call process directly
-            // But we need to load model first
-        }
     };
 
     useEffect(() => {
@@ -43,7 +37,8 @@ function App() {
 
             setStatus('Processing image...');
             const targetSize = MODELS[selectedModel].size;
-            const { tensor, originalImage } = await processImage(imageFile, targetSize);
+            const modelCategory = selectedModel.startsWith('rmbg') ? 'rmbg' : selectedModel as 'u2netp' | 'silueta';
+            const { tensor, originalImage } = await processImage(imageFile, targetSize, modelCategory);
 
             setStatus('Running inference...');
             const start = performance.now();
@@ -156,16 +151,16 @@ function App() {
 
             <style>{`
         .spin {
-            animation: spin 1s linear infinite;
+          animation: spin 1s linear infinite;
         }
         @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         @media (max-width: 768px) {
-            div[style*="grid-template-columns"] {
-                grid-template-columns: 1fr !important;
-            }
+          div[style*="grid-template-columns"] {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
         </div>
