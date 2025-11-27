@@ -12,6 +12,8 @@ A privacy-first, local background remover PWA using ONNX Runtime Web. Remove bac
 - **📱 PWA**: Install as an app, works offline after first load
 - **🎨 Modern Brutalist UI**: Bold, high-contrast design
 
+![Screenshot of the page](https://pictshare.net/f89f0n.png)
+
 ## 🚀 Quick Start
 
 ```bash
