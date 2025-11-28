@@ -96,7 +96,7 @@ The project includes a GitHub Actions workflow that automatically builds and pus
 To use it:
 1. Push your code to GitHub
 2. The workflow will automatically build and push the image
-3. Pull and run the image from `ghcr.io/YOUR_USERNAME/removebg:latest`
+3. Pull and run the image from `ghcr.io/geek-at/removebg:latest`
 
 ## 🌐 Browser Support
 
