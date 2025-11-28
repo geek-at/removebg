@@ -1,0 +1,6 @@
+version: '3.9'
+services:
+  geek-at:
+    image: ghcr.io/geek-at/removebg:latest
+    ports:
+      - 8080:80
