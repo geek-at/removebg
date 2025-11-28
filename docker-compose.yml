@@ -1,6 +1,6 @@
-version: '3.9'
 services:
-  geek-at:
+  remove-bg:
     image: ghcr.io/geek-at/removebg:latest
     ports:
-      - 8080:80
+      - 8081:80
+    restart: unless-stopped
