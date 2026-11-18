@@ -2,6 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Cross-origin isolation: required for multi-threaded WASM (SharedArrayBuffer).
+const isolationHeaders = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -29,6 +35,9 @@ export default defineConfig({
       }
     })
   ],
+  server: { headers: isolationHeaders },
+  preview: { headers: isolationHeaders },
+  worker: { format: 'es' },
   optimizeDeps: {
     exclude: ['onnxruntime-web']
   }
