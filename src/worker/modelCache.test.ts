@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { fetchModel } from './modelCache';
 
 const URL_A = 'https://example.test/model.onnx';
-const bytes = (...v: number[]) => new Uint8Array(v);
+const bytes = (...v: number[]) => new Uint8Array(v) as Uint8Array<ArrayBuffer>;
+type Bytes = Uint8Array<ArrayBuffer>;
 
-function fakeCaches(initial: Record<string, Uint8Array> = {}) {
-    const store = new Map<string, Uint8Array>(Object.entries(initial));
+function fakeCaches(initial: Record<string, Bytes> = {}) {
+    const store = new Map<string, Bytes>(Object.entries(initial));
     const put = vi.fn(async (url: string, res: Response) => {
         store.set(url, new Uint8Array(await res.arrayBuffer()));
     });
@@ -16,7 +17,7 @@ function fakeCaches(initial: Record<string, Uint8Array> = {}) {
     return { caches: { open: async () => cache } as unknown as CacheStorage, put, store };
 }
 
-function fakeFetch(body: Uint8Array, init: { status?: number; contentLength?: boolean } = {}) {
+function fakeFetch(body: Bytes, init: { status?: number; contentLength?: boolean } = {}) {
     return vi.fn(async () => {
         const headers = new Headers();
         if (init.contentLength !== false) headers.set('Content-Length', String(body.length));
@@ -38,7 +39,7 @@ describe('fetchModel', () => {
         const progress: (number | null)[] = [];
         const buf = await fetchModel(URL_A, (p) => progress.push(p), { caches, fetch: fakeFetch(bytes(4, 5, 6, 7)) });
         expect([...new Uint8Array(buf)]).toEqual([4, 5, 6, 7]);
-        expect(progress.at(-1)).toBe(1);
+        expect(progress[progress.length - 1]).toBe(1);
         expect([...store.get(URL_A)!]).toEqual([4, 5, 6, 7]);
     });
 

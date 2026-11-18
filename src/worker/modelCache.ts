@@ -34,13 +34,13 @@ export async function fetchModel(
     if (!res.ok) throw new Error(`Model download failed (HTTP ${res.status})`);
 
     const total = Number(res.headers.get('Content-Length')) || 0;
-    const chunks: Uint8Array[] = [];
+    const chunks: BlobPart[] = [];
     let received = 0;
     const reader = res.body!.getReader();
     for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        chunks.push(value);
+        chunks.push(value as Uint8Array<ArrayBuffer>);
         received += value.length;
         onProgress(total ? Math.min(1, received / total) : null);
     }
