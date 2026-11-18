@@ -6,9 +6,10 @@ A privacy-first, local background remover PWA using ONNX Runtime Web. Remove bac
 
 ## ✨ Features
 
-- **🔒 100% Local Processing**: All image processing happens in your browser using WebAssembly
+- **🔒 100% Local Processing**: All image processing happens in your browser
 - **🚫 No Server Required**: No uploads, no tracking, complete privacy
-- **🤖 5 AI Models**: Choose from fast to ultra-quality background removal
+- **🤖 3 Quality Tiers**: From a 5 MB fast model to BEN2 for the best edges
+- **⚡ WebGPU**: Runs on your GPU when available, with a CPU fallback
 - **📱 PWA**: Install as an app, works offline after first load
 - **🎨 Modern Brutalist UI**: Bold, high-contrast design
 
@@ -28,40 +29,48 @@ npm run build
 npm run preview
 ```
 
-## 🤖 Available Models
+## 🤖 Quality Tiers
 
-| Model | Speed | Quality | Size | Best For |
-|-------|-------|---------|------|----------|
-| **Fast (u2netp)** | ⚡⚡⚡ | ⭐⭐ | 320x320 | Quick previews |
-| **Balanced (silueta)** | ⚡⚡ | ⭐⭐⭐ | 320x320 | General use |
-| **Ultra Quant (RMBG)** | ⚡ | ⭐⭐⭐⭐ | 1024x1024 | High quality, faster |
-| **Ultra FP16 (RMBG)** | ⚡ | ⭐⭐⭐⭐⭐ | 1024x1024 | Best quality/speed |
-| **Ultra Full (RMBG)** | 🐌 | ⭐⭐⭐⭐⭐ | 1024x1024 | Maximum quality |
+| Tier | Model | Download | Best For |
+|------|-------|----------|----------|
+| **Fast** | u2netp | ~5 MB | Quick cut-outs for small web images |
+| **Balanced** | RMBG-1.4 | ~88 MB | General use |
+| **High** | BEN2 | ~219 MB | Best edges and hair; slow without a GPU |
+
+Models run on your GPU through WebGPU when the browser supports it and fall back
+to multi-threaded WebAssembly on the CPU otherwise. Each model is downloaded once
+and then kept in the browser's cache storage.
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React + TypeScript + Vite
-- **AI Runtime**: ONNX Runtime Web (WebAssembly)
+- **AI Runtime**: ONNX Runtime Web (WebGPU with WebAssembly fallback), running in a Web Worker
 - **Models**: 
-  - u2netp & silueta from [bg-remover-models](https://huggingface.co/robertwt7/bg-remover-models)
-  - RMBG-1.4 from [briaai](https://huggingface.co/briaai/RMBG-1.4)
+  - u2netp from [bg-remover-models](https://huggingface.co/robertwt7/bg-remover-models)
+  - RMBG-1.4 from [briaai](https://huggingface.co/briaai/RMBG-1.4) (non-commercial licence)
+  - BEN2 from [onnx-community](https://huggingface.co/onnx-community/BEN2-ONNX)
+- **Tests**: Vitest (`npm test`)
 - **PWA**: vite-plugin-pwa
 - **Icons**: lucide-react
 
 ## 🎯 How It Works
 
-1. **Select a model** based on your speed/quality needs
+1. **Select a quality tier** based on your speed/quality needs
 2. **Upload or drag & drop** an image
 3. **Wait for processing** (models download on first use)
 4. **Download** your image with transparent background!
 
 ## 🔧 Development
 
-The app uses model-specific preprocessing:
-- **RMBG models**: Simple 0-1 normalization
-- **u2netp/silueta**: ImageNet normalization (mean/std)
+Each tier carries its own preprocessing in `src/models.ts` (input size, mean/std,
+mask post-processing). Inference runs in `src/worker/inference.worker.ts`; after
+the mask is applied, soft edge pixels get a foreground colour cleanup so the old
+background doesn't show as a halo.
 
-All processing happens client-side using WebAssembly for maximum performance and privacy.
+Multi-threaded WebAssembly needs cross-origin isolation, so the server must send
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: credentialless`. The included `nginx.conf` and the
+Vite dev server already do.
 
 ## 📦 Building
 
@@ -69,7 +78,7 @@ All processing happens client-side using WebAssembly for maximum performance and
 npm run build
 ```
 
-The built app will be in the `dist` directory. Deploy it to any static hosting service!
+The built app will be in the `dist` directory. Deploy it to any static hosting service that can send the two headers above (without them it still works, but single-threaded on CPU).
 
 ## 🐳 Docker
 
@@ -102,6 +111,7 @@ To use it:
 
 Works in all modern browsers that support:
 - WebAssembly
+- WebGPU (optional, for GPU speed)
 - ES2020
 - Service Workers (for PWA features)
 

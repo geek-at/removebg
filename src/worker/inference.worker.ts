@@ -9,8 +9,7 @@ import type { WorkerRequest, WorkerResponse } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-// The wasm binaries are copied to the site root by copy_files.js.
-ort.env.wasm.wasmPaths = new URL(import.meta.env.BASE_URL, self.location.origin).href;
+// The wasm binary is emitted by Vite as a hashed asset next to this worker.
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 4, 8) : 1;
 
 const post = (msg: WorkerResponse) => self.postMessage(msg);

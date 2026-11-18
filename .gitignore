@@ -25,5 +25,3 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-# ONNX Runtime binaries, copied from node_modules by copy_files.js
-public/ort-wasm-*

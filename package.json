@@ -4,9 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node copy_files.js",
     "dev": "vite",
-    "prebuild": "node copy_files.js",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run"

@@ -1,69 +1,83 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ModelSelector } from './components/ModelSelector';
 import { ImageUploader } from './components/ImageUploader';
-import { loadModel, runInference, MODELS, ModelType } from './utils/onnxHelper';
-import { processImage, applyMask } from './utils/imageProcessing';
+import { removeBackground } from './inferenceClient';
+import { TierId } from './models';
 import { Loader2, Download } from 'lucide-react';
 
 function App() {
-    const [selectedModel, setSelectedModel] = useState<ModelType | null>(null);
+    const [selectedTier, setSelectedTier] = useState<TierId>('balanced');
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
     const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState('');
-    const [progress, setProgress] = useState(0);
+    const [progress, setProgress] = useState<number | null>(null);
 
-    const handleModelSelect = async (model: ModelType) => {
-        if (loading) return;
-        setSelectedModel(model);
+    // Object URLs hold the image in memory until revoked.
+    const originalUrlRef = useRef<string | null>(null);
+    const processedUrlRef = useRef<string | null>(null);
+
+    const showOriginal = (file: File | null) => {
+        if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
+        originalUrlRef.current = file ? URL.createObjectURL(file) : null;
+        setOriginalImageUrl(originalUrlRef.current);
+    };
+
+    const showProcessed = (blob: Blob | null) => {
+        if (processedUrlRef.current) URL.revokeObjectURL(processedUrlRef.current);
+        processedUrlRef.current = blob ? URL.createObjectURL(blob) : null;
+        setProcessedImageUrl(processedUrlRef.current);
     };
 
     useEffect(() => {
-        if (selectedModel && imageFile) {
-            process();
-        }
-    }, [selectedModel, imageFile]);
-
-    const process = async () => {
-        if (!selectedModel || !imageFile) return;
+        if (!imageFile) return;
+        let stale = false;
 
         setLoading(true);
-        setProcessedImageUrl(null);
+        setProgress(null);
+        setStatus('Starting...');
+        showProcessed(null);
 
-        try {
-            setStatus(`Loading model ${MODELS[selectedModel].name}...`);
-            await loadModel(selectedModel, (p) => setProgress(p * 100));
+        removeBackground(imageFile, selectedTier, (text, p) => {
+            if (stale) return;
+            setStatus(text);
+            setProgress(p);
+        })
+            .then((result) => {
+                if (stale) return;
+                showProcessed(result.blob);
+                const where = result.backend === 'webgpu' ? 'GPU' : 'CPU';
+                setStatus(`Done in ${result.inferenceMs.toFixed(0)} ms · ${where}`);
+                setLoading(false);
+                setProgress(null);
+            })
+            .catch((e: Error) => {
+                // A newer image or quality choice replaced this run.
+                if (stale || e.message === 'superseded') return;
+                console.error(e);
+                setStatus('Error: ' + e.message);
+                setLoading(false);
+                setProgress(null);
+            });
 
-            setStatus('Processing image...');
-            const targetSize = MODELS[selectedModel].size;
-            const modelCategory = selectedModel.startsWith('rmbg') ? 'rmbg' : selectedModel as 'u2netp' | 'silueta';
-            const { tensor, originalImage } = await processImage(imageFile, targetSize, modelCategory);
-
-            setStatus('Running inference...');
-            const start = performance.now();
-            const outputTensor = await runInference(tensor);
-            const end = performance.now();
-            console.log(`Inference time: ${(end - start).toFixed(2)}ms`);
-
-            setStatus('Applying mask...');
-            const resultUrl = applyMask(originalImage, outputTensor, targetSize);
-
-            setProcessedImageUrl(resultUrl);
-            setStatus(`Done in ${(end - start).toFixed(0)}ms`);
-        } catch (e) {
-            console.error(e);
-            setStatus('Error: ' + (e as Error).message);
-        } finally {
-            setLoading(false);
-            setProgress(0);
-        }
-    };
+        return () => {
+            stale = true;
+        };
+    }, [selectedTier, imageFile]);
 
     const handleImageSelect = (file: File) => {
         setImageFile(file);
-        setOriginalImageUrl(URL.createObjectURL(file));
-        setProcessedImageUrl(null);
+        showOriginal(file);
+    };
+
+    const handleClear = () => {
+        setImageFile(null);
+        showOriginal(null);
+        showProcessed(null);
+        setLoading(false);
+        setProgress(null);
+        setStatus('');
     };
 
     return (
@@ -78,11 +92,7 @@ function App() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
                 <div className="sidebar">
                     <div className="card">
-                        <ModelSelector
-                            selectedModel={selectedModel}
-                            onSelect={handleModelSelect}
-                            disabled={loading}
-                        />
+                        <ModelSelector selectedTier={selectedTier} onSelect={setSelectedTier} />
                     </div>
 
                     <div className="card">
@@ -91,9 +101,9 @@ function App() {
                             {loading && <Loader2 className="spin" />}
                             <span>{status || 'Ready'}</span>
                         </div>
-                        {loading && progress > 0 && progress < 100 && (
+                        {loading && progress !== null && (
                             <div style={{ width: '100%', height: '10px', border: '2px solid black', marginTop: '0.5rem' }}>
-                                <div style={{ width: `${progress}%`, height: '100%', background: 'black' }}></div>
+                                <div style={{ width: `${progress * 100}%`, height: '100%', background: 'black' }}></div>
                             </div>
                         )}
                     </div>
@@ -102,20 +112,14 @@ function App() {
                 <div className="main-content">
                     {!originalImageUrl ? (
                         <div className="card" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <ImageUploader onImageSelect={handleImageSelect} disabled={loading} />
+                            <ImageUploader onImageSelect={handleImageSelect} />
                         </div>
                     ) : (
                         <div className="results">
                             <div className="card" style={{ position: 'relative' }}>
                                 <button
-                                    onClick={() => {
-                                        setImageFile(null);
-                                        setOriginalImageUrl(null);
-                                        setProcessedImageUrl(null);
-                                        setStatus('');
-                                    }}
+                                    onClick={handleClear}
                                     style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10, padding: '0.5rem' }}
-                                    disabled={loading}
                                 >
                                     X
                                 </button>
