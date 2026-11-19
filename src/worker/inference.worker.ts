@@ -1,9 +1,9 @@
 /// <reference lib="webworker" />
 import * as ort from 'onnxruntime-web/webgpu';
-import { TIERS, type Backend, type Tier } from '../models';
+import { TIERS, type Backend } from '../models';
 import { cleanEdges } from '../utils/edgeCleanup';
 import { maskToAlpha, toCHW } from '../utils/tensor';
-import { runWithFallback } from './fallback';
+import { createEngine, type SessionLike } from './engine';
 import { fetchModel } from './modelCache';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
@@ -30,67 +30,35 @@ function availableBackends(): Promise<Backend[]> {
     return backendsPromise;
 }
 
-/** Tier/backend pairs that failed once; not retried in this session. */
-const broken = new Set<string>();
+// ---- engine ----------------------------------------------------------
 
-// ---- session (one at a time) -----------------------------------------
-
-let session: ort.InferenceSession | null = null;
-let sessionKey = '';
-
-async function getSession(tier: Tier, backend: Backend, id: number): Promise<ort.InferenceSession> {
-    const key = `${tier.id}/${backend}`;
-    if (session && sessionKey === key) return session;
-
-    if (session) {
-        const old = session;
-        session = null;
-        sessionKey = '';
-        await old.release().catch(() => {});
-    }
-
-    post({ id, type: 'status', text: 'Downloading model…', progress: null });
-    const model = await fetchModel(tier.url, (progress) =>
-        post({ id, type: 'status', text: 'Downloading model…', progress }),
-    );
-
-    post({ id, type: 'status', text: 'Preparing model…', progress: null });
-    const created = await ort.InferenceSession.create(model, { executionProviders: [backend] });
-    session = created;
-    sessionKey = key;
-    return created;
+async function createSession(model: ArrayBuffer, backend: Backend): Promise<SessionLike> {
+    const session = await ort.InferenceSession.create(model, { executionProviders: [backend] });
+    return {
+        async run(input, size) {
+            const start = performance.now();
+            const tensor = new ort.Tensor('float32', input, [1, 3, size, size]);
+            const results = await session.run({ [session.inputNames[0]]: tensor });
+            const output = results[session.outputNames[0]];
+            const data = await output.getData();
+            const inferenceMs = performance.now() - start;
+            const dims = output.dims;
+            const type = output.type;
+            for (const t of Object.values(results)) t.dispose();
+            if (!(data instanceof Float32Array)) throw new Error(`Unexpected model output type ${type}`);
+            return { data, width: dims[dims.length - 1], height: dims[dims.length - 2], inferenceMs };
+        },
+        release: () => session.release(),
+    };
 }
+
+const engine = createEngine({
+    backends: availableBackends,
+    fetchModel: (url, onProgress, signal) => fetchModel(url, onProgress, { signal }),
+    createSession,
+});
 
 // ---- pipeline ---------------------------------------------------------
-
-interface RawMask {
-    data: Float32Array;
-    width: number;
-    height: number;
-    inferenceMs: number;
-}
-
-async function infer(tier: Tier, backend: Backend, input: Float32Array, id: number): Promise<RawMask> {
-    const key = `${tier.id}/${backend}`;
-    if (broken.has(key)) throw new Error(`${backend} already failed for this model`);
-    try {
-        const s = await getSession(tier, backend, id);
-        post({ id, type: 'status', text: 'Removing background…', progress: null });
-        const start = performance.now();
-        const tensor = new ort.Tensor('float32', input, [1, 3, tier.size, tier.size]);
-        const results = await s.run({ [s.inputNames[0]]: tensor });
-        const output = results[s.outputNames[0]];
-        const data = await output.getData();
-        const inferenceMs = performance.now() - start;
-        const dims = output.dims;
-        for (const t of Object.values(results)) t.dispose();
-        if (!(data instanceof Float32Array)) throw new Error(`Unexpected model output type ${output.type}`);
-        return { data, width: dims[dims.length - 1], height: dims[dims.length - 2], inferenceMs };
-    } catch (e) {
-        broken.add(key);
-        throw e;
-    }
-}
 
 function context(canvas: OffscreenCanvas): OffscreenCanvasRenderingContext2D {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -100,7 +68,7 @@ function context(canvas: OffscreenCanvas): OffscreenCanvasRenderingContext2D {
     return ctx;
 }
 
-async function process(req: WorkerRequest): Promise<void> {
+async function process(req: WorkerRequest, signal: AbortSignal): Promise<void> {
     const { id, bitmap } = req;
     const tier = TIERS[req.tier];
     const width = bitmap.width;
@@ -112,7 +80,13 @@ async function process(req: WorkerRequest): Promise<void> {
     smallCtx.drawImage(bitmap, 0, 0, tier.size, tier.size);
     const input = toCHW(smallCtx.getImageData(0, 0, tier.size, tier.size).data, tier.size, tier.mean, tier.std);
 
-    const { result: mask, backend } = await runWithFallback(await availableBackends(), (b) => infer(tier, b, input, id));
+    const { mask, backend } = await engine.infer(
+        tier,
+        input,
+        (text, progress) => post({ id, type: 'status', text, progress }),
+        signal,
+    );
+    if (signal.aborted) throw new Error('superseded');
 
     // Mask → alpha bytes → stretched back to the image's own size.
     const maskAlpha = maskToAlpha(mask.data, tier.post);
@@ -149,26 +123,29 @@ async function process(req: WorkerRequest): Promise<void> {
 
 // ---- queue: one job at a time, only the newest waiting job is kept ----
 
-let running = false;
+let running: AbortController | null = null;
 let waiting: WorkerRequest | null = null;
 
 async function drain(): Promise<void> {
     if (running) return;
-    running = true;
     while (waiting) {
         const req = waiting;
         waiting = null;
+        running = new AbortController();
         try {
-            await process(req);
+            await process(req, running.signal);
         } catch (e) {
-            console.error(e);
+            if (!running.signal.aborted) console.error(e);
             post({ id: req.id, type: 'error', message: e instanceof Error ? e.message : String(e) });
         }
     }
-    running = false;
+    running = null;
 }
 
 self.addEventListener('message', (ev: MessageEvent<WorkerRequest>) => {
+    // A newer request makes the running one pointless: stop its download and
+    // skip its remaining stages.
+    running?.abort();
     waiting?.bitmap.close();
     waiting = ev.data;
     void drain();

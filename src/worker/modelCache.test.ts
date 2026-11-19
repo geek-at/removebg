@@ -63,4 +63,16 @@ describe('fetchModel', () => {
         const buf = await fetchModel(URL_A, () => {}, { caches, fetch: fakeFetch(bytes(8)) });
         expect([...new Uint8Array(buf)]).toEqual([8]);
     });
+
+    it('passes the abort signal to fetch and stores nothing when aborted', async () => {
+        const { caches, put } = fakeCaches();
+        const controller = new AbortController();
+        const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+            expect(init?.signal).toBe(controller.signal);
+            controller.abort();
+            throw new DOMException('Aborted', 'AbortError');
+        }) as unknown as typeof globalThis.fetch;
+        await expect(fetchModel(URL_A, () => {}, { caches, fetch, signal: controller.signal })).rejects.toThrow('Aborted');
+        expect(put).not.toHaveBeenCalled();
+    });
 });

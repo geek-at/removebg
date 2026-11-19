@@ -3,6 +3,7 @@ const CACHE_NAME = 'removebg-models-v1';
 interface Deps {
     caches?: CacheStorage;
     fetch?: typeof fetch;
+    signal?: AbortSignal;
 }
 
 async function openCache(storage: CacheStorage | undefined): Promise<Cache | null> {
@@ -30,7 +31,7 @@ export async function fetchModel(
     const hit = await cache?.match(url);
     if (hit) return hit.arrayBuffer();
 
-    const res = await doFetch(url);
+    const res = await doFetch(url, { signal: deps.signal });
     if (!res.ok) throw new Error(`Model download failed (HTTP ${res.status})`);
 
     const total = Number(res.headers.get('Content-Length')) || 0;
